@@ -1,7 +1,10 @@
 """Async wrapper for the continuous batching engine."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+
+import mlx.core as mx
 
 from mlx_vllm.engine.generation import ContinuousBatchingEngine
 
@@ -15,6 +18,15 @@ class AsyncGenerationResult:
     logprobs: list[float]
     finish_reason: str
     prompt_tokens: int
+
+
+@dataclass
+class _WeightUpdate:
+    """Pending weight update."""
+
+    weights: dict[str, mx.array]
+    version: int | None
+    future: asyncio.Future
 
 
 class AsyncEngine:
@@ -51,6 +63,13 @@ class AsyncEngine:
         self._pending_futures: dict[int, tuple[asyncio.Future[AsyncGenerationResult], int]] = {}
         self._loop_task: asyncio.Task | None = None
         self._running = False
+        self._lora_version = 0
+
+        # Thread pool for running blocking step() calls
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="engine")
+
+        # Queue for pending weight updates (applied between steps for thread safety)
+        self._weight_update_queue: asyncio.Queue[_WeightUpdate] = asyncio.Queue()
 
     def _get_extra_stop_tokens(self, tokenizer) -> set[int]:
         """Get additional stop tokens beyond eos_token_ids."""
@@ -78,17 +97,38 @@ class AsyncEngine:
             except asyncio.CancelledError:
                 pass
         self._engine.close()
+        self._executor.shutdown(wait=False)
+
+    def _apply_pending_weight_updates(self) -> None:
+        """Apply any pending weight updates. Called from engine loop between steps."""
+        while True:
+            try:
+                update = self._weight_update_queue.get_nowait()
+                self._engine.load_lora_weights(update.weights)
+                if update.version is not None:
+                    self._lora_version = update.version
+                else:
+                    self._lora_version += 1
+                if not update.future.done():
+                    update.future.set_result(self._lora_version)
+            except asyncio.QueueEmpty:
+                break
 
     async def _engine_loop(self) -> None:
         """Background loop that runs engine steps."""
+        loop = asyncio.get_running_loop()
         while self._running:
+            # Apply pending weight updates at safe point (between steps)
+            self._apply_pending_weight_updates()
+
             if not self._engine.has_work():
                 # No work to do, yield control and wait a bit
                 await asyncio.sleep(0.001)
                 continue
 
-            # Run one step (this is blocking but should be fast)
-            completed = self._engine.step()
+            # Run step in thread pool to avoid blocking the event loop.
+            # This allows HTTP requests to be received while generation runs.
+            completed = await loop.run_in_executor(self._executor, self._engine.step)
 
             # Resolve futures for completed requests
             for output in completed:
@@ -103,9 +143,6 @@ class AsyncEngine:
                     )
                     if not future.done():
                         future.set_result(result)
-
-            # Yield control to allow other coroutines to run
-            await asyncio.sleep(0)
 
     async def generate(
         self,
@@ -144,3 +181,29 @@ class AsyncEngine:
     def is_ready(self) -> bool:
         """Check if engine is ready to accept requests."""
         return self._running
+
+    @property
+    def lora_version(self) -> int:
+        """Current LoRA adapter version."""
+        return self._lora_version
+
+    async def load_lora_weights(
+        self, weights: dict[str, mx.array], version: int | None = None
+    ) -> int:
+        """
+        Load LoRA adapter weights into the model.
+
+        Queues the update to be applied between generation steps, ensuring
+        thread safety. The method returns once the weights are actually loaded.
+
+        Args:
+            weights: Dict mapping param names to mx.array values
+            version: Optional explicit version number. If None, auto-increments.
+
+        Returns:
+            The new version number.
+        """
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[int] = loop.create_future()
+        await self._weight_update_queue.put(_WeightUpdate(weights, version, future))
+        return await future

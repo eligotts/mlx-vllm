@@ -104,3 +104,17 @@ class ModelInfo(BaseModel):
 class ModelListResponse(BaseModel):
     object: Literal["list"] = "list"
     data: list[ModelInfo]
+
+
+# LoRA adapter loading
+
+
+class LoadAdapterRequest(BaseModel):
+    weights: str  # Base64-encoded safetensors bytes
+    version: int | None = None  # Optional explicit version number
+
+
+class LoadAdapterResponse(BaseModel):
+    status: Literal["ok", "error"]
+    version: int
+    message: str | None = None

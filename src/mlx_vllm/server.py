@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from mlx_lm import load
 
-from mlx_vllm.api import router
+from mlx_vllm.api import adapter_router, router
 from mlx_vllm.config import ServerConfig
 from mlx_vllm.engine.async_engine import AsyncEngine
 
@@ -37,6 +37,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     start = time.time()
     model, tokenizer = load(config.model_path)
     print(f"Model loaded in {time.time() - start:.2f}s")
+
+    # Initialize LoRA layers if configured (for dynamic weight updates)
+    if config.lora_rank is not None:
+        from mlx_lm.tuner.utils import linear_to_lora_layers
+
+        lora_config = {
+            "rank": config.lora_rank,
+            "scale": config.lora_scale,
+            "dropout": 0.0,
+        }
+        linear_to_lora_layers(model, config.lora_layers, lora_config)
+        model.eval()
+        print(f"LoRA initialized: rank={config.lora_rank}, layers={config.lora_layers}")
 
     engine = AsyncEngine(
         model=model,
@@ -92,6 +105,7 @@ def create_app() -> FastAPI:
         }
 
     app.include_router(router)
+    app.include_router(adapter_router)
     return app
 
 

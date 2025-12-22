@@ -4,6 +4,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Literal
 
+import mlx.core as mx
+
 from mlx_lm.generate import BatchGenerator
 
 
@@ -163,3 +165,17 @@ class ContinuousBatchingEngine:
     def close(self) -> None:
         """Clean up resources."""
         self._generator.close()
+
+    def load_lora_weights(self, weights: dict[str, mx.array]) -> None:
+        """
+        Load LoRA adapter weights directly into the model.
+
+        Safe to call between step() calls. At most 1 in-flight token
+        uses old weights; subsequent tokens use new weights.
+
+        Args:
+            weights: Dict mapping param names to mx.array values
+        """
+        weight_items = list(weights.items())
+        self.model.load_weights(weight_items, strict=False)
+        self.model.eval()

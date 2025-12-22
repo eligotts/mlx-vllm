@@ -12,4 +12,9 @@ class ServerConfig(BaseSettings):
     max_batch_size: int = 32
     max_tokens: int = 4096
 
+    # LoRA configuration (sets up empty LoRA layers at startup for weight updates)
+    lora_rank: int | None = None  # If set, enables LoRA with this rank
+    lora_layers: int = 16  # Number of layers to apply LoRA to (-1 for all)
+    lora_scale: float = 20.0  # LoRA scaling factor
+
     model_config = {"env_prefix": "MLX_VLLM_"}
