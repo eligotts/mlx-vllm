@@ -7,6 +7,7 @@ from typing import Literal
 import mlx.core as mx
 
 from mlx_lm.generate import BatchGenerator
+from mlx_lm.sample_utils import make_sampler
 
 
 @dataclass
@@ -80,6 +81,8 @@ class ContinuousBatchingEngine:
             max_tokens=default_max_tokens,
             stop_tokens=stop_tokens,
             completion_batch_size=max_batch_size,
+            prefill_batch_size=1,
+            sampler=make_sampler(temp=0.7),
         )
 
     def add(self, prompt: list[int], max_tokens: int | None = None) -> int:
@@ -135,8 +138,11 @@ class ContinuousBatchingEngine:
         completed = []
         for r in responses:
             active = self._active[r.uid]
-            active.tokens.append(r.token)
-            active.logprobs.append(r.logprobs[r.token].item())
+
+            # Don't include stop tokens in output (they signal end, not content)
+            if r.finish_reason != "stop":
+                active.tokens.append(r.token)
+                active.logprobs.append(r.logprobs[r.token].item())
 
             if r.finish_reason is not None:
                 del self._active[r.uid]

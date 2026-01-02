@@ -5,6 +5,7 @@ from mlx_lm import load
 from mlx_vllm import ContinuousBatchingEngine
 
 MODEL_PATH = "/Users/eligottlieb/.lmstudio/models/lmstudio-community/Qwen2.5-7B-Instruct-MLX-4bit"
+# MODEL_PATH = "/Users/eligottlieb/.lmstudio/models/mlx-community/Trinity-Nano-Preview-8bit"
 
 
 def get_extra_stop_tokens(tokenizer) -> set[int]:

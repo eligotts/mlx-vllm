@@ -98,6 +98,7 @@ async def chat_completions(
                 message=ChatMessage(role="assistant", content=response_text),
                 finish_reason=result.finish_reason,
                 logprobs=logprobs,
+                token_ids=result.tokens if body.return_token_ids else None,
             )
         ],
         usage=Usage(
@@ -105,6 +106,7 @@ async def chat_completions(
             completion_tokens=len(result.tokens),
             total_tokens=result.prompt_tokens + len(result.tokens),
         ),
+        prompt_token_ids=prompt_tokens if body.return_token_ids else None,
     )
 
 

@@ -31,7 +31,9 @@ from safetensors.numpy import save as save_safetensors
 SERVER_URL = "http://localhost:8000"
 
 # Model path (same as server uses)
-MODEL_PATH = "/Users/eligottlieb/.lmstudio/models/lmstudio-community/Qwen2.5-7B-Instruct-MLX-4bit"
+# MODEL_PATH = "/Users/eligottlieb/.lmstudio/models/lmstudio-community/Qwen2.5-7B-Instruct-MLX-4bit"
+MODEL_PATH = "/Users/eligottlieb/.lmstudio/models/mlx-community/Trinity-Nano-Preview-8bit"
+
 
 # LoRA config (must match server's config)
 LORA_RANK = 8
@@ -112,7 +114,7 @@ def load_model_with_lora() -> dict[str, np.ndarray]:
         print(f"Sample parameter names: {param_names[:4]}")
 
     # Convert to numpy for serialization
-    weights_np = {k: np.array(v) for k, v in adapter_weights.items()}
+    weights_np = {k: np.array(v.astype(mx.float32)) for k, v in adapter_weights.items()}
 
     # Clean up model to free memory
     del model, tokenizer, adapter_weights

@@ -21,6 +21,7 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     logprobs: bool = False
     top_logprobs: int | None = None
+    return_token_ids: bool = False  # Return prompt_token_ids and token_ids
 
 
 # Chat completions response - logprobs
@@ -51,6 +52,7 @@ class ChatCompletionChoice(BaseModel):
     message: ChatMessage
     finish_reason: Literal["stop", "length"] | None = None
     logprobs: ChoiceLogprobs | None = None
+    token_ids: list[int] | None = None  # Completion token IDs (unpadded)
 
 
 class Usage(BaseModel):
@@ -66,6 +68,7 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: list[ChatCompletionChoice]
     usage: Usage
+    prompt_token_ids: list[int] | None = None  # Prompt token IDs (unpadded)
 
 
 # Streaming

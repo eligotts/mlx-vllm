@@ -74,7 +74,12 @@ class AsyncEngine:
     def _get_extra_stop_tokens(self, tokenizer) -> set[int]:
         """Get additional stop tokens beyond eos_token_ids."""
         extra = set()
-        for token in ["<|endoftext|>", "<|eot_id|>", "<|end|>"]:
+        # Common stop tokens across different model families:
+        # - <|im_end|>: Qwen, ChatML format
+        # - <|eot_id|>: Llama 3
+        # - <|end|>: Phi-3
+        # - <|endoftext|>: GPT-2 style
+        for token in ["<|im_end|>", "<|endoftext|>", "<|eot_id|>", "<|end|>"]:
             ids = tokenizer.encode(token, add_special_tokens=False)
             if len(ids) == 1:
                 extra.add(ids[0])
